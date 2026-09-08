@@ -5,7 +5,7 @@ permissions:
 
 on:
   schedule:
-    - cron: "0 0 * * *" # every day
+    - cron: "27 0 * * *" # daily
   workflow_dispatch:
 
 jobs:
@@ -13,7 +13,6 @@ jobs:
     name: Sync latest commits from upstream repo
     runs-on: ubuntu-latest
     if: ${{ github.event.repository.fork }}
-
     steps:
       - name: Checkout target repo
         uses: actions/checkout@v6
@@ -34,11 +33,42 @@ jobs:
             git reset --hard upstream/main
             git push --force-with-lease origin main
           else
-            # 有本地修改，保持原来的合并方式，不覆盖任何人的改动
+            # 有本地改动，保持原来的合并方式，不覆盖任何人的改动
             if ! git pull --no-rebase upstream main; then
               echo "[Error] 合并上游变更产生冲突，自动同步已暂停，请手动 Sync Fork 并解决冲突。"
               echo "[Error] Merge conflict detected while syncing upstream. Please sync your fork manually and resolve the conflicts."
               exit 1
             fi
+            git push origin main
+          fi
+
+      - name: Restore custom wrangler.toml
+        run: |
+          git config user.name "GH Action - Custom Config"
+          git config user.email "action@github.com"
+          cat > wrangler.toml <<'EOF'
+          name = "ytdshhxydcf"
+          main = "_worker.js"
+          compatibility_date = "2025-11-04"
+          workers_dev = true
+
+          routes = [
+          	{ pattern = "cftz.ytdshhxy.top", custom_domain = true },
+          	{ pattern = "cftz.xn--pss25crx6ar77b.cn", custom_domain = true },
+          ]
+
+          [[kv_namespaces]]
+          binding = "KV"			#KV绑定名默认不可修改
+          id = "d3bc609a72454e8fa0b83cadbcdd0957"		#KV数据库id
+
+          [vars]
+          ADMIN = "zzhhyy1215"
+          EOF
+          # heredoc 前导空格修补（去掉行首空格）
+          sed -i 's/^          //' wrangler.toml
+          sed -i 's/^          	//' wrangler.toml
+          if ! git diff --quiet wrangler.toml; then
+            git add wrangler.toml
+            git commit -m "restore custom wrangler.toml after upstream sync"
             git push origin main
           fi
